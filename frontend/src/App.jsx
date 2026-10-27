@@ -113,6 +113,26 @@ export default function App(){
   const [savingForm,setSavingForm] = useState({anggota_id:'',jenis:'wajib',arah:'setor',nominal:'10000',periode_wajib:new Date().toISOString().slice(0,7),keterangan:''});
   const [counts,setCounts] = useState({ pinjaman:0, angsuran:0, simpanan:0 });
   const [tab,setTab] = useState('dashboard');
+  const [botStatus,setBotStatus] = useState(null);
+  const [botLoading,setBotLoading] = useState(false);
+  async function loadBotStatus() {
+    if (!client) return;
+    const { data, error: e } = await client.from('bot_wa_status').select('status,qr_data,qr_expires_at,last_seen_at,enabled').eq('id',1).single();
+    if (e) setError(e.message); else setBotStatus(data);
+  }
+  async function toggleBot() {
+    if (!botStatus) return;
+    setBotLoading(true); setError('');
+    const { error: e } = await client.from('bot_wa_status').update({enabled:!botStatus.enabled}).eq('id',1);
+    if (e) setError(e.message);
+    await loadBotStatus(); setBotLoading(false);
+  }
+  useEffect(()=>{
+    if(tab!=='bot-wa' || profile?.peran!=='admin')return;
+    loadBotStatus();
+    const timer=setInterval(loadBotStatus,10000);
+    return ()=>clearInterval(timer);
+  },[tab,profile]);
   const [search,setSearch] = useState('');
   const [editing,setEditing] = useState(null);
   const [form,setForm] = useState(initial);
@@ -251,10 +271,17 @@ export default function App(){
       </form></section>
       <section className="panel"><h2>Ringkasan Simpanan</h2><div className="config-grid"><div><span>Saldo Pokok</span><strong>{savingSummary?rupiah(savingSummary.pokok||0):'Memuat...'}</strong></div><div><span>Saldo Wajib</span><strong>{savingSummary?rupiah(savingSummary.wajib||0):'Memuat...'}</strong></div><div><span>Saldo Sukarela</span><strong>{savingSummary?rupiah(savingSummary.sukarela||0):'Memuat...'}</strong></div></div><small>Saldo dihitung dari seluruh transaksi tercatat di database, bukan hanya riwayat yang ditampilkan.</small></section>
       <section className="panel"><h2>Riwayat Transaksi</h2><div className="table-wrap"><table><thead><tr><th>Bukti</th><th>Tanggal</th><th>Anggota</th><th>Jenis</th><th>Arah</th><th>Nominal</th><th>Bukti PDF</th></tr></thead><tbody>{savings.map(x=><tr key={x.id}><td>{x.nomor_bukti}</td><td>{new Date(x.created_at).toLocaleDateString('id-ID')}</td><td>{members.find(m=>m.id===x.anggota_id)?.nama_lengkap||x.anggota_id}</td><td>{x.jenis}</td><td>{x.arah}</td><td>{rupiah(x.nominal)}</td><td><button className="secondary" type="button" onClick={()=>{try{cetakBuktiSimpanan(x,members.find(m=>m.id===x.anggota_id),petugasMap[x.petugas_id]);}catch(e){setError(e.message);}}}><Download size={15}/> PDF</button></td></tr>)}</tbody></table>{!savings.length&&<div className="empty">Belum ada transaksi simpanan.</div>}</div></section></>}
-      {tab==='bot-wa'&&<><div className="heading"><div><h1>Bot WhatsApp</h1><p>Panduan mengaktifkan bot WhatsApp Business koperasi</p></div></div>
-        <section className="panel"><h2>Status Koneksi</h2><div className="notice">Belum terhubung ke layanan bot. Dashboard ini belum dapat menampilkan QR atau status WhatsApp secara langsung.</div><p>Bot WhatsApp Web harus berjalan pada komputer Windows atau server. Jika komputer mati atau program berhenti, balasan otomatis tidak tersedia.</p><p><strong>Jenis nomor:</strong> WhatsApp Business yang sudah aktif. <strong>Biaya API:</strong> Rp0. Integrasi WhatsApp Web ini tidak resmi dan memiliki risiko pemutusan sesi atau pembatasan akun.</p></section>
-        <section className="panel"><h2>Cara Mengaktifkan</h2><ol><li>Pasang Node.js versi 20 atau lebih baru pada komputer Windows.</li><li>Unduh kode bot dari repository GitHub koperasi, kemudian buka folder <code>bot-wa</code> di terminal.</li><li>Jalankan <code>npm install</code>, kemudian <code>npm run check</code> dan <code>npm start</code>.</li><li>Pindai QR yang tampil di terminal menggunakan WhatsApp Business: <strong>Perangkat tertaut → Tautkan perangkat</strong>.</li><li>Setelah muncul tulisan <strong>Bot siap</strong>, kirim pesan <strong>menu</strong> dari nomor WhatsApp lain.</li></ol><p><a href="https://github.com/kbpari/Kop/tree/main/bot-wa" target="_blank" rel="noopener noreferrer">Buka kode dan panduan instalasi bot di GitHub ↗</a></p></section>
-        <section className="panel"><h2>Menu Balasan Otomatis</h2><p>0 — Menu utama<br/>1 — Informasi Keanggotaan<br/>2 — Informasi Simpanan<br/>3 — Jam Layanan<br/>4 — Hubungi Pengurus</p><small>Saldo, identitas, dan transaksi pribadi tidak diberikan otomatis sebelum verifikasi anggota tersedia. Pengaturan menu dari browser serta QR langsung memerlukan backend bot yang aman dan belum diimplementasikan.</small></section>
+      {tab==='bot-wa'&&<><div className="heading"><div><h1>Bot WhatsApp</h1><p>Kelola koneksi WhatsApp Business melalui browser</p></div><button className="secondary" onClick={loadBotStatus}><RefreshCw size={17}/> Segarkan</button></div>
+        <section className="panel"><h2>Status Koneksi</h2>
+          <p><strong>Status:</strong> {botStatus ? (botStatus.last_seen_at && Date.now()-new Date(botStatus.last_seen_at).getTime()<45000 ? ({terhubung:'🟢 Terhubung',menunggu_qr:'🟡 Menunggu pemindaian QR',terputus:'🔴 Terputus',offline:'⚪ Belum terhubung'}[botStatus.status]||botStatus.status) : '⚪ Bot offline / komputer tidak aktif') : 'Memuat...'}</p>
+          <p><strong>Balasan otomatis:</strong> {botStatus?.enabled?'Diizinkan':'Dinonaktifkan'} (berlaku saat bot online)</p>
+          <button className="primary" type="button" disabled={!botStatus||botLoading} onClick={toggleBot}>{botStatus?.enabled?'Nonaktifkan Balasan':'Aktifkan Balasan'}</button>
+          {botStatus?.qr_data && botStatus.qr_expires_at && new Date(botStatus.qr_expires_at).getTime()>Date.now() && botStatus.last_seen_at && Date.now()-new Date(botStatus.last_seen_at).getTime()<45000 && <div style={{marginTop:20}}><h3>Pindai QR WhatsApp</h3><img src={botStatus.qr_data} width="280" height="280" alt="QR untuk menautkan WhatsApp Business" style={{maxWidth:'100%',height:'auto'}}/><p>Di ponsel: WhatsApp Business → Perangkat tertaut → Tautkan perangkat. QR berubah secara berkala.</p></div>}
+          {(!botStatus?.last_seen_at || Date.now()-new Date(botStatus.last_seen_at).getTime()>=45000) && <p>Komputer bot belum terdeteksi. Jalankan program bot pada komputer Windows terlebih dahulu. QR akan muncul di sini setelah program aktif.</p>}
+          <small>Status diperbarui sekitar setiap 10 detik. Tombol aktif/nonaktif mengatur balasan otomatis, bukan menyalakan komputer dari jarak jauh.</small>
+        </section>
+        <section className="panel"><h2>Persiapan Pertama Kali</h2><ol><li>Instal Node.js pada komputer Windows, unduh folder <code>bot-wa</code> dari GitHub.</li><li>Siapkan variabel lingkungan <code>SUPABASE_URL</code> dan <code>SUPABASE_SERVICE_ROLE_KEY</code> secara lokal. <strong>Jangan masukkan service role key ke browser atau GitHub.</strong></li><li>Jalankan <code>npm install</code> dan <code>npm start</code> pada komputer bot.</li><li>Saat QR muncul di atas, pindai dengan WhatsApp Business pada ponsel koperasi.</li></ol><p><a href="https://github.com/kbpari/Kop/tree/main/bot-wa" target="_blank" rel="noopener noreferrer">Panduan lengkap instalasi ↗</a></p></section>
+        <section className="panel"><h2>Perintah yang Didukung</h2><p>0 — Menu utama<br/>1 — Informasi Keanggotaan<br/>2 — Informasi Simpanan<br/>3 — Jam Layanan<br/>4 — Hubungi Pengurus</p><small>Bot tidak mengirim saldo atau data pribadi anggota. WhatsApp Web merupakan integrasi tidak resmi yang dapat mengalami pemutusan sesi atau pembatasan akun.</small></section>
       </>}
       {tab==='laporan'&&<><div className="heading"><div><h1>Laporan</h1><p>Ekspor daftar anggota dalam format PDF atau Excel</p></div></div><section className="panel"><h2>Laporan Data Anggota</h2><p>Data yang diekspor mencakup nomor anggota, nama, WhatsApp, tanggal bergabung dan status.</p><div className="export-buttons"><button className="primary" onClick={()=>exportPDF(members)}><Download size={17}/> Unduh PDF</button><button className="secondary" onClick={()=>exportExcel(members).catch(e=>setError(e.message))}><Download size={17}/> Unduh Excel (.xlsx)</button></div></section></>}
       <footer>© {new Date().getFullYear()} Koperasi LPP Kedungneng · Versi awal administrasi</footer>
