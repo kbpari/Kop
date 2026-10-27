@@ -1,0 +1,39 @@
+name: Uji Kode Bot WhatsApp
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'bot-wa/**'
+      - '.github/workflows/uji-bot-wa.yml'
+  pull_request:
+    paths:
+      - 'bot-wa/**'
+      - '.github/workflows/uji-bot-wa.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check-bot:
+    name: Periksa sintaks dan dependensi bot
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: bot-wa
+    steps:
+      - name: Ambil kode
+        uses: actions/checkout@v4
+      - name: Siapkan Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Periksa sintaks bot tanpa menjalankan WhatsApp
+        run: npm run check
+      - name: Periksa dependensi tanpa menjalankan browser atau login
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Ringkasan
+        run: echo "Pemeriksaan kode selesai. Bot WhatsApp tidak dijalankan, dan tidak ada kredensial atau sesi WhatsApp yang digunakan."
