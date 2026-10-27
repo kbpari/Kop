@@ -108,6 +108,7 @@ export default function App(){
   const [members,setMembers] = useState([]);
   const [settings,setSettings] = useState(null);
   const [savings,setSavings] = useState([]);
+  const [savingSummary,setSavingSummary] = useState(null);
   const [petugasMap,setPetugasMap] = useState({});
   const [savingForm,setSavingForm] = useState({anggota_id:'',jenis:'wajib',arah:'setor',nominal:'10000',periode_wajib:new Date().toISOString().slice(0,7),keterangan:''});
   const [counts,setCounts] = useState({ pinjaman:0, angsuran:0, simpanan:0 });
@@ -156,6 +157,9 @@ export default function App(){
       const {data:sv,error:se}=await client.from('transaksi_simpanan').select('id,nomor_bukti,anggota_id,petugas_id,jenis,arah,nominal,periode_wajib,created_at,status').order('created_at',{ascending:false}).limit(1000);
       if(se)throw se;
       setSavings(sv||[]);
+      const {data:summary,error:summaryError}=await client.rpc('ringkasan_simpanan');
+      if(summaryError)throw summaryError;
+      setSavingSummary(Object.fromEntries((summary||[]).map(x=>[x.jenis,Number(x.saldo)])));
       const {data:staff,error:staffError}=await client.from('petugas').select('id,nama');
       if(staffError)throw staffError;
       setPetugasMap(Object.fromEntries((staff||[]).map(p=>[p.id,p.nama])));
@@ -245,7 +249,7 @@ export default function App(){
         <label>Keterangan<input value={savingForm.keterangan} onChange={e=>setSavingForm({...savingForm,keterangan:e.target.value})}/></label>
         <div className="form-actions"><button className="primary" disabled={busy||!savingForm.anggota_id}>{busy?'Memproses...':'Catat Transaksi'}</button></div>
       </form></section>
-      <section className="panel"><h2>Ringkasan Simpanan</h2><div className="config-grid"><div><span>Saldo Pokok</span><strong>{rupiah(savings.filter(x=>x.status==='tercatat'&&x.jenis==='pokok').reduce((a,x)=>a+Number(x.nominal),0))}</strong></div><div><span>Saldo Wajib</span><strong>{rupiah(savings.filter(x=>x.status==='tercatat'&&x.jenis==='wajib').reduce((a,x)=>a+Number(x.nominal),0))}</strong></div><div><span>Saldo Sukarela</span><strong>{rupiah(savings.filter(x=>x.status==='tercatat'&&x.jenis==='sukarela').reduce((a,x)=>a+(x.arah==='setor'?1:-1)*Number(x.nominal),0))}</strong></div></div><small>Ringkasan berdasarkan maksimum 1.000 transaksi terbaru yang ditampilkan.</small></section>
+      <section className="panel"><h2>Ringkasan Simpanan</h2><div className="config-grid"><div><span>Saldo Pokok</span><strong>{savingSummary?rupiah(savingSummary.pokok||0):'Memuat...'}</strong></div><div><span>Saldo Wajib</span><strong>{savingSummary?rupiah(savingSummary.wajib||0):'Memuat...'}</strong></div><div><span>Saldo Sukarela</span><strong>{savingSummary?rupiah(savingSummary.sukarela||0):'Memuat...'}</strong></div></div><small>Saldo dihitung dari seluruh transaksi tercatat di database, bukan hanya riwayat yang ditampilkan.</small></section>
       <section className="panel"><h2>Riwayat Transaksi</h2><div className="table-wrap"><table><thead><tr><th>Bukti</th><th>Tanggal</th><th>Anggota</th><th>Jenis</th><th>Arah</th><th>Nominal</th><th>Bukti PDF</th></tr></thead><tbody>{savings.map(x=><tr key={x.id}><td>{x.nomor_bukti}</td><td>{new Date(x.created_at).toLocaleDateString('id-ID')}</td><td>{members.find(m=>m.id===x.anggota_id)?.nama_lengkap||x.anggota_id}</td><td>{x.jenis}</td><td>{x.arah}</td><td>{rupiah(x.nominal)}</td><td><button className="secondary" type="button" onClick={()=>{try{cetakBuktiSimpanan(x,members.find(m=>m.id===x.anggota_id),petugasMap[x.petugas_id]);}catch(e){setError(e.message);}}}><Download size={15}/> PDF</button></td></tr>)}</tbody></table>{!savings.length&&<div className="empty">Belum ada transaksi simpanan.</div>}</div></section></>}
       {tab==='laporan'&&<><div className="heading"><div><h1>Laporan</h1><p>Ekspor daftar anggota dalam format PDF atau Excel</p></div></div><section className="panel"><h2>Laporan Data Anggota</h2><p>Data yang diekspor mencakup nomor anggota, nama, WhatsApp, tanggal bergabung dan status.</p><div className="export-buttons"><button className="primary" onClick={()=>exportPDF(members)}><Download size={17}/> Unduh PDF</button><button className="secondary" onClick={()=>exportExcel(members).catch(e=>setError(e.message))}><Download size={17}/> Unduh Excel (.xlsx)</button></div></section></>}
       <footer>© {new Date().getFullYear()} Koperasi LPP Kedungneng · Versi awal administrasi</footer>
