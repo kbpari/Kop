@@ -57,6 +57,45 @@ function exportPDF(members) {
   pdf.save('anggota-koperasi-lpp-kedungneng.pdf');
 }
 
+
+function cetakBuktiSimpanan(transaksi, anggota, petugas) {
+  if (!transaksi || !anggota) throw new Error('Data bukti transaksi tidak lengkap.');
+  const pdf = new jsPDF({unit:'mm',format:'a5'});
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  pdf.setFillColor(19,55,104);pdf.rect(0,0,pageWidth,29,'F');
+  pdf.setTextColor(255,255,255);pdf.setFont('helvetica','bold');pdf.setFontSize(15);
+  pdf.text('KOPERASI LPP KEDUNGNENG',pageWidth/2,13,{align:'center'});
+  pdf.setFontSize(10);pdf.setFont('helvetica','normal');pdf.text('BUKTI TRANSAKSI SIMPANAN',pageWidth/2,21,{align:'center'});
+  pdf.setTextColor(25,35,50);pdf.setFontSize(10);
+  const jenis = {pokok:'Simpanan Pokok',wajib:'Simpanan Wajib',sukarela:'Simpanan Sukarela'}[transaksi.jenis] || transaksi.jenis;
+  const tanggal = new Date(transaksi.created_at).toLocaleString('id-ID',{timeZone:'Asia/Jakarta',dateStyle:'long',timeStyle:'short'});
+  const rows = [
+    ['Nomor Bukti',transaksi.nomor_bukti],
+    ['Tanggal / Jam',tanggal+' WIB'],
+    ['Nomor Anggota',anggota.nomor_anggota],
+    ['Nama Anggota',anggota.nama_lengkap],
+    ['Jenis',jenis],
+    ['Transaksi',transaksi.arah==='tarik'?'Penarikan':'Setoran'],
+    ['Periode Wajib',transaksi.periode_wajib?transaksi.periode_wajib.slice(0,7):'-'],
+    ['Petugas',petugas||'-'],
+    ['Status',transaksi.status==='tercatat'?'Tercatat':'Dibatalkan']
+  ];
+  let y=38;
+  for(const [label,value] of rows){
+    pdf.setFont('helvetica','normal');pdf.text(label,12,y);
+    pdf.setFont('helvetica','bold');
+    const lines=pdf.splitTextToSize(String(value||'-'),pageWidth-62);
+    pdf.text(lines,59,y);y+=Math.max(8,lines.length*5+3);
+  }
+  pdf.setDrawColor(210,220,232);pdf.line(12,y,pageWidth-12,y);y+=11;
+  pdf.setFontSize(11);pdf.text('NOMINAL',12,y);
+  pdf.setFontSize(16);pdf.text(rupiah(transaksi.nominal),pageWidth-12,y,{align:'right'});
+  y+=12;pdf.setFontSize(8);pdf.setFont('helvetica','normal');
+  pdf.text('Bukti ini dibuat dari transaksi yang tersimpan di sistem koperasi.',12,y);
+  pdf.text('Verifikasi ke pengurus koperasi jika terdapat perbedaan data.',12,y+5);
+  pdf.save('bukti-'+transaksi.nomor_bukti+'.pdf');
+}
+
 export default function App(){
   const [session,setSession] = useState(null);
   const [authLoading,setAuthLoading] = useState(true);
@@ -69,6 +108,7 @@ export default function App(){
   const [members,setMembers] = useState([]);
   const [settings,setSettings] = useState(null);
   const [savings,setSavings] = useState([]);
+  const [petugasMap,setPetugasMap] = useState({});
   const [savingForm,setSavingForm] = useState({anggota_id:'',jenis:'wajib',arah:'setor',nominal:'10000',periode_wajib:new Date().toISOString().slice(0,7),keterangan:''});
   const [counts,setCounts] = useState({ pinjaman:0, angsuran:0, simpanan:0 });
   const [tab,setTab] = useState('dashboard');
@@ -113,9 +153,12 @@ export default function App(){
       if(a.error)throw a.error;
       if(s.error)throw s.error;
       setMembers(a.data||[]);setSettings(s.data);
-      const {data:sv,error:se}=await client.from('transaksi_simpanan').select('id,nomor_bukti,anggota_id,jenis,arah,nominal,periode_wajib,created_at,status').order('created_at',{ascending:false}).limit(1000);
+      const {data:sv,error:se}=await client.from('transaksi_simpanan').select('id,nomor_bukti,anggota_id,petugas_id,jenis,arah,nominal,periode_wajib,created_at,status').order('created_at',{ascending:false}).limit(1000);
       if(se)throw se;
       setSavings(sv||[]);
+      const {data:staff,error:staffError}=await client.from('petugas').select('id,nama');
+      if(staffError)throw staffError;
+      setPetugasMap(Object.fromEntries((staff||[]).map(p=>[p.id,p.nama])));
       setCounts({pinjaman:p.count||0,angsuran:j.count||0,simpanan:t.count||0});
     }catch(e){setError(e.message||String(e));}
     finally{setBusy(false);}
@@ -203,7 +246,7 @@ export default function App(){
         <div className="form-actions"><button className="primary" disabled={busy||!savingForm.anggota_id}>{busy?'Memproses...':'Catat Transaksi'}</button></div>
       </form></section>
       <section className="panel"><h2>Ringkasan Simpanan</h2><div className="config-grid"><div><span>Saldo Pokok</span><strong>{rupiah(savings.filter(x=>x.status==='tercatat'&&x.jenis==='pokok').reduce((a,x)=>a+Number(x.nominal),0))}</strong></div><div><span>Saldo Wajib</span><strong>{rupiah(savings.filter(x=>x.status==='tercatat'&&x.jenis==='wajib').reduce((a,x)=>a+Number(x.nominal),0))}</strong></div><div><span>Saldo Sukarela</span><strong>{rupiah(savings.filter(x=>x.status==='tercatat'&&x.jenis==='sukarela').reduce((a,x)=>a+(x.arah==='setor'?1:-1)*Number(x.nominal),0))}</strong></div></div><small>Ringkasan berdasarkan maksimum 1.000 transaksi terbaru yang ditampilkan.</small></section>
-      <section className="panel"><h2>Riwayat Transaksi</h2><div className="table-wrap"><table><thead><tr><th>Bukti</th><th>Tanggal</th><th>Anggota</th><th>Jenis</th><th>Arah</th><th>Nominal</th></tr></thead><tbody>{savings.map(x=><tr key={x.id}><td>{x.nomor_bukti}</td><td>{new Date(x.created_at).toLocaleDateString('id-ID')}</td><td>{members.find(m=>m.id===x.anggota_id)?.nama_lengkap||x.anggota_id}</td><td>{x.jenis}</td><td>{x.arah}</td><td>{rupiah(x.nominal)}</td></tr>)}</tbody></table>{!savings.length&&<div className="empty">Belum ada transaksi simpanan.</div>}</div></section></>}
+      <section className="panel"><h2>Riwayat Transaksi</h2><div className="table-wrap"><table><thead><tr><th>Bukti</th><th>Tanggal</th><th>Anggota</th><th>Jenis</th><th>Arah</th><th>Nominal</th><th>Bukti PDF</th></tr></thead><tbody>{savings.map(x=><tr key={x.id}><td>{x.nomor_bukti}</td><td>{new Date(x.created_at).toLocaleDateString('id-ID')}</td><td>{members.find(m=>m.id===x.anggota_id)?.nama_lengkap||x.anggota_id}</td><td>{x.jenis}</td><td>{x.arah}</td><td>{rupiah(x.nominal)}</td><td><button className="secondary" type="button" onClick={()=>{try{cetakBuktiSimpanan(x,members.find(m=>m.id===x.anggota_id),petugasMap[x.petugas_id]);}catch(e){setError(e.message);}}}><Download size={15}/> PDF</button></td></tr>)}</tbody></table>{!savings.length&&<div className="empty">Belum ada transaksi simpanan.</div>}</div></section></>}
       {tab==='laporan'&&<><div className="heading"><div><h1>Laporan</h1><p>Ekspor daftar anggota dalam format PDF atau Excel</p></div></div><section className="panel"><h2>Laporan Data Anggota</h2><p>Data yang diekspor mencakup nomor anggota, nama, WhatsApp, tanggal bergabung dan status.</p><div className="export-buttons"><button className="primary" onClick={()=>exportPDF(members)}><Download size={17}/> Unduh PDF</button><button className="secondary" onClick={()=>exportExcel(members).catch(e=>setError(e.message))}><Download size={17}/> Unduh Excel (.xlsx)</button></div></section></>}
       <footer>© {new Date().getFullYear()} Koperasi LPP Kedungneng · Versi awal administrasi</footer>
     </main></div>
