@@ -123,7 +123,7 @@ export default function App(){
   async function saveMember(e){
     e.preventDefault();setBusy(true);setError('');setMessage('');
     const normalized={...form,nomor_anggota:form.nomor_anggota.trim(),nama_lengkap:form.nama_lengkap.trim(),nomor_whatsapp:form.nomor_whatsapp.trim()||null};
-    const query=editing ? client.from('anggota').update(normalized).eq('id',editing) : client.from('anggota').insert(normalized);
+    const query=editing && editing!=='new' ? client.from('anggota').update(normalized).eq('id',editing) : client.from('anggota').insert(normalized);
     const {error:e2}=await query;
     if(e2)setError(e2.message);else{setEditing(null);setForm(initial);setMessage('Data anggota berhasil disimpan.');await loadData();}
     setBusy(false);
