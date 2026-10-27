@@ -68,6 +68,8 @@ export default function App(){
   const [profile,setProfile] = useState(null);
   const [members,setMembers] = useState([]);
   const [settings,setSettings] = useState(null);
+  const [savings,setSavings] = useState([]);
+  const [savingForm,setSavingForm] = useState({anggota_id:'',jenis:'wajib',arah:'setor',nominal:'10000',periode_wajib:new Date().toISOString().slice(0,7),keterangan:''});
   const [counts,setCounts] = useState({ pinjaman:0, angsuran:0, simpanan:0 });
   const [tab,setTab] = useState('dashboard');
   const [search,setSearch] = useState('');
@@ -111,6 +113,9 @@ export default function App(){
       if(a.error)throw a.error;
       if(s.error)throw s.error;
       setMembers(a.data||[]);setSettings(s.data);
+      const {data:sv,error:se}=await client.from('transaksi_simpanan').select('id,nomor_bukti,anggota_id,jenis,arah,nominal,periode_wajib,created_at,status').order('created_at',{ascending:false}).limit(1000);
+      if(se)throw se;
+      setSavings(sv||[]);
       setCounts({pinjaman:p.count||0,angsuran:j.count||0,simpanan:t.count||0});
     }catch(e){setError(e.message||String(e));}
     finally{setBusy(false);}
@@ -139,6 +144,21 @@ export default function App(){
     if(e2)setError(e2.message);else{setPasswordSetup(false);setNewPassword('');setConfirmPassword('');setMessage('Password berhasil disimpan. Anda sudah masuk.');window.history.replaceState(null,'',window.location.pathname);}
     setBusy(false);
   }
+  async function saveSaving(e){
+    e.preventDefault();setBusy(true);setError('');setMessage('');
+    try{
+      const amount=Number(savingForm.nominal);
+      if(!Number.isFinite(amount)||amount<=0)throw new Error('Nominal harus lebih dari nol.');
+      const {error:e2}=await client.rpc('catat_simpanan',{
+        p_anggota_id:savingForm.anggota_id,p_jenis:savingForm.jenis,p_arah:savingForm.arah,p_nominal:amount,
+        p_periode_wajib:savingForm.jenis==='wajib'?savingForm.periode_wajib+'-01':null,
+        p_keterangan:savingForm.keterangan||null,p_referensi:crypto.randomUUID()
+      });
+      if(e2)throw e2;
+      setMessage('Transaksi simpanan berhasil dicatat beserta kas dan jurnal.');
+      await loadData();
+    }catch(e){setError(e.message||String(e));}finally{setBusy(false);}
+  }
   async function saveMember(e){
     e.preventDefault();setBusy(true);setError('');setMessage('');
     const normalized={...form,nomor_anggota:form.nomor_anggota.trim(),nama_lengkap:form.nama_lengkap.trim(),nomor_whatsapp:form.nomor_whatsapp.trim()||null};
@@ -158,8 +178,8 @@ export default function App(){
 
   return <div className="shell">
     <aside className="sidebar"><div className="brand"><div className="mark small">K</div><div><strong>KSP Digital</strong><span>LPP Kedungneng</span></div></div>
-      <nav><button className={tab==='dashboard'?'active':''} onClick={()=>setTab('dashboard')}><LayoutDashboard size={19}/> Dashboard</button><button className={tab==='anggota'?'active':''} onClick={()=>setTab('anggota')}><Users size={19}/> Data Anggota</button><button className={tab==='laporan'?'active':''} onClick={()=>setTab('laporan')}><Download size={19}/> Laporan</button></nav>
-      <div className="side-note">Modul simpanan, pinjaman, angsuran, dan WhatsApp akan diaktifkan setelah transaksi keuangan teruji.</div>
+      <nav><button className={tab==='dashboard'?'active':''} onClick={()=>setTab('dashboard')}><LayoutDashboard size={19}/> Dashboard</button><button className={tab==='anggota'?'active':''} onClick={()=>setTab('anggota')}><Users size={19}/> Data Anggota</button><button className={tab==='simpanan'?'active':''} onClick={()=>setTab('simpanan')}><Wallet size={19}/> Simpanan</button><button className={tab==='laporan'?'active':''} onClick={()=>setTab('laporan')}><Download size={19}/> Laporan</button></nav>
+      <div className="side-note">Modul pinjaman, angsuran, dan WhatsApp akan diaktifkan setelah pengujian transaksi keuangan.</div>
     </aside>
     <div className="workspace"><header className="topbar"><div><div className="eyebrow">Sistem Informasi Koperasi</div><strong>Koperasi LPP Kedungneng</strong></div><div className="user"><span>{profile.nama} · Admin</span><button title="Keluar" onClick={()=>client.auth.signOut()}><LogOut size={18}/></button></div></header>
     <main className="content">{error&&<div className="alert">{error}</div>}{message&&<div className="notice">{message}</div>}
@@ -172,6 +192,18 @@ export default function App(){
       {tab==='anggota'&&<><div className="heading"><div><h1>Data Anggota</h1><p>Tambah dan kelola anggota koperasi</p></div><button className="primary" onClick={()=>{setEditing('new');setForm(initial);setError('');}}><Plus size={18}/> Tambah Anggota</button></div>
         {editing&&<section className="panel"><div className="heading compact"><h2>{editing==='new'?'Tambah Anggota':'Ubah Data Anggota'}</h2><button className="icon-button" onClick={()=>{setEditing(null);setForm(initial);}}><X size={20}/></button></div><form onSubmit={saveMember} className="member-form"><label>Nomor Anggota<input required value={form.nomor_anggota} onChange={e=>setForm({...form,nomor_anggota:e.target.value})}/></label><label>Nama Lengkap<input required value={form.nama_lengkap} onChange={e=>setForm({...form,nama_lengkap:e.target.value})}/></label><label>Nomor WhatsApp<input placeholder="628xxxxxxxxxx" value={form.nomor_whatsapp} onChange={e=>setForm({...form,nomor_whatsapp:e.target.value})}/></label><label>Tanggal Bergabung<input type="date" required value={form.tanggal_bergabung} onChange={e=>setForm({...form,tanggal_bergabung:e.target.value})}/></label><label>Status<select value={form.status} onChange={e=>setForm({...form,status:e.target.value})}><option value="aktif">Aktif</option><option value="nonaktif">Nonaktif</option></select></label><div className="form-actions"><button className="primary" disabled={busy}>{busy?'Menyimpan...':'Simpan Anggota'}</button></div></form></section>}
         <section className="panel"><div className="table-tools"><div className="search"><Search size={18}/><input placeholder="Cari nama atau nomor anggota..." value={search} onChange={e=>setSearch(e.target.value)}/></div><span>{filtered.length} anggota ditampilkan</span></div><div className="table-wrap"><table><thead><tr><th>Nomor Anggota</th><th>Nama Lengkap</th><th>WhatsApp</th><th>Bergabung</th><th>Status</th><th></th></tr></thead><tbody>{filtered.map(m=><tr key={m.id}><td>{m.nomor_anggota}</td><td><strong>{m.nama_lengkap}</strong></td><td>{m.nomor_whatsapp||'—'}</td><td>{m.tanggal_bergabung}</td><td><span className={'pill '+m.status}>{m.status}</span></td><td><button className="icon-button" title="Ubah" onClick={()=>openEdit(m)}><Pencil size={16}/></button></td></tr>)}</tbody></table>{filtered.length===0&&<div className="empty">Belum ada data anggota.</div>}</div></section></>}
+      {tab==='simpanan'&&<><div className="heading"><div><h1>Simpanan Anggota</h1><p>Catat setoran dan penarikan melalui kas kantor</p></div></div>
+      <section className="panel"><h2>Transaksi Baru</h2><form className="member-form" onSubmit={saveSaving}>
+        <label>Anggota<select required value={savingForm.anggota_id} onChange={e=>setSavingForm({...savingForm,anggota_id:e.target.value})}><option value="">Pilih anggota</option>{members.filter(m=>m.status==='aktif').map(m=><option key={m.id} value={m.id}>{m.nomor_anggota} — {m.nama_lengkap}</option>)}</select></label>
+        <label>Jenis Simpanan<select value={savingForm.jenis} onChange={e=>{const jenis=e.target.value;setSavingForm({...savingForm,jenis,arah:'setor',nominal:jenis==='pokok'?'100000':jenis==='wajib'?'10000':''});}}><option value="pokok">Pokok</option><option value="wajib">Wajib</option><option value="sukarela">Sukarela</option></select></label>
+        <label>Transaksi<select value={savingForm.arah} onChange={e=>setSavingForm({...savingForm,arah:e.target.value})}><option value="setor">Setoran</option>{savingForm.jenis==='sukarela'&&<option value="tarik">Penarikan</option>}</select></label>
+        <label>Nominal (Rp)<input type="number" min="1" step="0.01" required value={savingForm.nominal} onChange={e=>setSavingForm({...savingForm,nominal:e.target.value})}/></label>
+        {savingForm.jenis==='wajib'&&<label>Periode Wajib<input type="month" required value={savingForm.periode_wajib} onChange={e=>setSavingForm({...savingForm,periode_wajib:e.target.value})}/></label>}
+        <label>Keterangan<input value={savingForm.keterangan} onChange={e=>setSavingForm({...savingForm,keterangan:e.target.value})}/></label>
+        <div className="form-actions"><button className="primary" disabled={busy||!savingForm.anggota_id}>{busy?'Memproses...':'Catat Transaksi'}</button></div>
+      </form></section>
+      <section className="panel"><h2>Ringkasan Simpanan</h2><div className="config-grid"><div><span>Saldo Pokok</span><strong>{rupiah(savings.filter(x=>x.status==='tercatat'&&x.jenis==='pokok').reduce((a,x)=>a+Number(x.nominal),0))}</strong></div><div><span>Saldo Wajib</span><strong>{rupiah(savings.filter(x=>x.status==='tercatat'&&x.jenis==='wajib').reduce((a,x)=>a+Number(x.nominal),0))}</strong></div><div><span>Saldo Sukarela</span><strong>{rupiah(savings.filter(x=>x.status==='tercatat'&&x.jenis==='sukarela').reduce((a,x)=>a+(x.arah==='setor'?1:-1)*Number(x.nominal),0))}</strong></div></div><small>Ringkasan berdasarkan maksimum 1.000 transaksi terbaru yang ditampilkan.</small></section>
+      <section className="panel"><h2>Riwayat Transaksi</h2><div className="table-wrap"><table><thead><tr><th>Bukti</th><th>Tanggal</th><th>Anggota</th><th>Jenis</th><th>Arah</th><th>Nominal</th></tr></thead><tbody>{savings.map(x=><tr key={x.id}><td>{x.nomor_bukti}</td><td>{new Date(x.created_at).toLocaleDateString('id-ID')}</td><td>{members.find(m=>m.id===x.anggota_id)?.nama_lengkap||x.anggota_id}</td><td>{x.jenis}</td><td>{x.arah}</td><td>{rupiah(x.nominal)}</td></tr>)}</tbody></table>{!savings.length&&<div className="empty">Belum ada transaksi simpanan.</div>}</div></section></>}
       {tab==='laporan'&&<><div className="heading"><div><h1>Laporan</h1><p>Ekspor daftar anggota dalam format PDF atau Excel</p></div></div><section className="panel"><h2>Laporan Data Anggota</h2><p>Data yang diekspor mencakup nomor anggota, nama, WhatsApp, tanggal bergabung dan status.</p><div className="export-buttons"><button className="primary" onClick={()=>exportPDF(members)}><Download size={17}/> Unduh PDF</button><button className="secondary" onClick={()=>exportExcel(members).catch(e=>setError(e.message))}><Download size={17}/> Unduh Excel (.xlsx)</button></div></section></>}
       <footer>© {new Date().getFullYear()} Koperasi LPP Kedungneng · Versi awal administrasi</footer>
     </main></div>
