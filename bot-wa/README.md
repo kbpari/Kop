@@ -1,37 +1,39 @@
-# Bot WhatsApp Koperasi LPP Kedungneng (Windows)
+# Bot WhatsApp Koperasi LPP Kedungneng — Dashboard Browser
 
-Bot lokal untuk nomor **WhatsApp Business yang sudah aktif**. Menggunakan library WhatsApp Web tidak resmi. **Tidak memerlukan API berbayar**, tetapi berisiko sesi terputus atau akun dibatasi. Bot ini bukan layanan WhatsApp Business Platform resmi.
+Dashboard admin di website koperasi menampilkan **status koneksi, QR WhatsApp, dan tombol aktif/nonaktif balasan**. Komputer Windows tetap menjalankan proses bot lokal. QR hanya terlihat oleh admin yang login.
 
-## Persiapan
+## Instalasi pertama kali di Windows
 
-1. Instal Node.js LTS (versi 20 atau lebih baru) pada komputer Windows.
-2. Unduh repository koperasi dari GitHub atau buka folder project lokal.
-3. Buka PowerShell di folder `bot-wa`.
-4. Jalankan:
+1. Pasang Node.js versi 20+ dan unduh repository koperasi.
+2. Buka PowerShell di folder `bot-wa` dan jalankan `npm install`.
+3. Di **Supabase Dashboard → Project Settings → API Keys**, ambil **secret/service_role key** proyek koperasi. **Kunci ini sangat rahasia**, hanya boleh disimpan di komputer bot yang dipercaya. Jangan pernah masukkan ke frontend, GitHub, chat publik, atau tangkapan layar.
+4. Buat file lokal `start-bot.cmd` di folder `bot-wa` dengan isi berikut (ganti placeholder di komputer sendiri):
 
-   ```powershell
-   npm install
-   npm run check
+   ```bat
+   @echo off
+   cd /d "%~dp0"
+   set "SUPABASE_URL=https://wlwfhelhaeiltnqfnzjd.supabase.co"
+   set "SUPABASE_SERVICE_ROLE_KEY=ISI_KUNCI_RAHASIA_DI_KOMPUTER_SENDIRI"
    npm start
    ```
 
-5. QR akan muncul di terminal saat login pertama. Di ponsel dengan nomor WhatsApp Business koperasi, buka **Perangkat tertaut → Tautkan perangkat**, lalu pindai QR.
-6. Tunggu tulisan **Bot siap**. Kirim **menu** atau **halo** dari nomor lain untuk menguji.
-7. Untuk menghentikan bot tekan **Ctrl+C**. Jalankan kembali `npm start` saat komputer menyala.
+5. Klik dua kali `start-bot.cmd` untuk menyalakan bot. **Jangan unggah file tersebut ke GitHub.**
+6. Login ke website koperasi → **Bot WhatsApp**. Tunggu QR tampil, kemudian pindai melalui WhatsApp Business → **Perangkat tertaut**.
+7. Tunggu status **Terhubung**, lalu uji dengan mengirim **menu** dari nomor lain.
 
-**Jangan unggah QR, folder `.wwebjs_auth`, atau isi sesi ke GitHub / pihak lain.** Folder sesi disimpan hanya di PC tempat bot berjalan.
+## Pemakaian harian tanpa terminal
 
-## Fitur awal
+Klik dua kali file `start-bot.cmd` saat komputer dinyalakan. Jika ingin otomatis, gunakan **Task Scheduler Windows** untuk menjalankan file tersebut saat login pengguna; pastikan komputer terjaga dan koneksi internet aktif. Setelah berjalan, pengaturan balasan serta QR dilakukan dari browser.
 
-- Menu otomatis: 0, 1, 2, 3, 4.
-- Hanya merespons pesan pribadi dengan perintah yang dikenali; mengabaikan grup, status, dan pesan sendiri.
-- Tidak mengirim broadcast, tidak membaca data keuangan, dan tidak menyimpan isi pesan anggota ke database.
-- Pembatasan frekuensi balasan sederhana per nomor.
+**Keamanan:** File `start-bot.cmd` berisi kredensial istimewa. Batasi izin file dan akun Windows, gunakan komputer terpercaya, jangan sinkronkan ke folder publik/cloud, dan rotasi kunci jika bocor. Jika tidak ingin menyimpan service_role key pada komputer bot, diperlukan backend perantara dengan autentikasi khusus (belum tersedia).
 
-## Batasan
+## Fitur dan batasan
 
-- Bot tidak berjalan di Cloudflare Pages karena memerlukan proses Node.js dan browser yang hidup.
-- Bot berhenti saat PC mati, tidur, kehilangan koneksi, atau program ditutup.
-- Akun WhatsApp Business mungkin mengalami konflik perangkat, sesi terputus, atau pembatasan. Penggunaan mengikuti ketentuan WhatsApp dan menjadi tanggung jawab pengelola.
-- **Jangan gunakan untuk mengirim saldo, identitas pribadi, atau data keuangan** sebelum verifikasi nomor dan persetujuan anggota dirancang dan diuji.
-- Informasi jam layanan masih berupa placeholder dan perlu dikonfirmasi oleh pengurus.
+- Dashboard hanya bisa dibaca/diatur oleh admin koperasi yang terautentikasi melalui kebijakan RLS Supabase.
+- QR ditampilkan hanya saat proses bot berjalan dan QR belum kedaluwarsa.
+- Tombol **Nonaktifkan Balasan** menghentikan respons otomatis, bukan mematikan program atau WhatsApp Business.
+- Tidak ada data saldo atau transaksi anggota yang dibuka melalui WhatsApp.
+- Bot tidak berjalan jika komputer mati, tidur, atau koneksi internet terputus.
+- Integrasi menggunakan WhatsApp Web **tidak resmi**. Ada risiko sesi terputus, konflik perangkat, dan pembatasan akun.
+- Sesi tersimpan dalam `.wwebjs_auth` dan tidak boleh diunggah.
+- **Tidak perlu biaya API**, tetapi perangkat dan koneksi internet tetap diperlukan.
