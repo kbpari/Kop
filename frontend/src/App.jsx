@@ -60,6 +60,9 @@ function exportPDF(members) {
 export default function App(){
   const [session,setSession] = useState(null);
   const [authLoading,setAuthLoading] = useState(true);
+  const [passwordSetup,setPasswordSetup] = useState(false);
+  const [newPassword,setNewPassword] = useState('');
+  const [confirmPassword,setConfirmPassword] = useState('');
   const [email,setEmail] = useState('');
   const [password,setPassword] = useState('');
   const [profile,setProfile] = useState(null);
@@ -76,8 +79,8 @@ export default function App(){
 
   useEffect(()=>{
     if(!client){setAuthLoading(false);return;}
-    client.auth.getSession().then(({data})=>{setSession(data.session);setAuthLoading(false);});
-    const { data:{subscription} } = client.auth.onAuthStateChange((_event,s)=>{setSession(s);setProfile(null);});
+    client.auth.getSession().then(({data})=>{setSession(data.session);setAuthLoading(false);}).catch(()=>setAuthLoading(false));
+    const { data:{subscription} } = client.auth.onAuthStateChange((event,s)=>{setSession(s);setProfile(null);if(event==='PASSWORD_RECOVERY' || (event==='SIGNED_IN' && (window.location.hash.includes('type=invite') || window.location.hash.includes('type=recovery'))))setPasswordSetup(true);});
     return ()=>subscription.unsubscribe();
   },[]);
 
@@ -120,6 +123,22 @@ export default function App(){
     if(e2)setError(e2.message);
     setBusy(false);
   }
+  async function requestReset(){
+    if(!email.trim()){setError('Masukkan email terlebih dahulu.');return;}
+    setBusy(true);setError('');setMessage('');
+    const {error:e}=await client.auth.resetPasswordForEmail(email.trim(),{redirectTo:window.location.origin});
+    if(e)setError(e.message);else setMessage('Jika email terdaftar, tautan pengaturan password akan dikirim. Periksa inbox dan spam.');
+    setBusy(false);
+  }
+  async function updatePassword(e){
+    e.preventDefault();setError('');setMessage('');
+    if(newPassword.length<8){setError('Password minimal 8 karakter.');return;}
+    if(newPassword!==confirmPassword){setError('Konfirmasi password tidak sama.');return;}
+    setBusy(true);
+    const {error:e2}=await client.auth.updateUser({password:newPassword});
+    if(e2)setError(e2.message);else{setPasswordSetup(false);setNewPassword('');setConfirmPassword('');setMessage('Password berhasil disimpan. Anda sudah masuk.');window.history.replaceState(null,'',window.location.pathname);}
+    setBusy(false);
+  }
   async function saveMember(e){
     e.preventDefault();setBusy(true);setError('');setMessage('');
     const normalized={...form,nomor_anggota:form.nomor_anggota.trim(),nama_lengkap:form.nama_lengkap.trim(),nomor_whatsapp:form.nomor_whatsapp.trim()||null};
@@ -132,7 +151,8 @@ export default function App(){
   const filtered=members.filter(m=>(m.nama_lengkap+' '+m.nomor_anggota).toLowerCase().includes(search.toLowerCase()));
   if(!client)return <main className="center"><section className="login-card"><h1>Koperasi LPP Kedungneng</h1><p>Konfigurasi Supabase belum tersedia. Tambahkan <code>VITE_SUPABASE_URL</code> dan <code>VITE_SUPABASE_PUBLISHABLE_KEY</code> pada Cloudflare Pages atau file <code>.env</code>.</p></section></main>;
   if(authLoading)return <main className="center">Memuat sesi...</main>;
-  if(!session)return <main className="center"><form className="login-card" onSubmit={signIn}><div className="mark">K</div><h1>Koperasi LPP Kedungneng</h1><p>Masuk sebagai pengurus koperasi</p><label>Email<input type="email" value={email} onChange={e=>setEmail(e.target.value)} required autoComplete="username"/></label><label>Kata sandi<input type="password" value={password} onChange={e=>setPassword(e.target.value)} required autoComplete="current-password"/></label>{error&&<div className="alert">{error}</div>}<button disabled={busy} className="primary">{busy?'Memproses...':'Masuk ke Dashboard'}</button><small>Akun harus didaftarkan sebagai admin di database koperasi.</small></form></main>;
+  if(passwordSetup && session)return <main className="center"><form className="login-card" onSubmit={updatePassword}><div className="mark">K</div><h1>Atur Password Administrator</h1><p>Buat password baru untuk akun Anda.</p><label>Password baru<input type="password" autoComplete="new-password" minLength={8} required value={newPassword} onChange={e=>setNewPassword(e.target.value)}/></label><label>Ulangi password<input type="password" autoComplete="new-password" minLength={8} required value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)}/></label>{error&&<div className="alert">{error}</div>}<button className="primary" disabled={busy}>{busy?'Menyimpan...':'Simpan Password'}</button></form></main>;
+  if(!session)return <main className="center"><form className="login-card" onSubmit={signIn}><div className="mark">K</div><h1>Koperasi LPP Kedungneng</h1><p>Masuk sebagai pengurus koperasi</p><label>Email<input type="email" value={email} onChange={e=>setEmail(e.target.value)} required autoComplete="username"/></label><label>Kata sandi<input type="password" value={password} onChange={e=>setPassword(e.target.value)} required autoComplete="current-password"/></label>{error&&<div className="alert">{error}</div>}{message&&<div className="notice">{message}</div>}<button disabled={busy} className="primary">{busy?'Memproses...':'Masuk ke Dashboard'}</button><button type="button" className="secondary" disabled={busy} onClick={requestReset}>Lupa password / Aktivasi akun</button><small>Akun harus didaftarkan sebagai admin di database koperasi.</small></form></main>;
   if(profile===null)return <main className="center">Memeriksa hak akses...</main>;
   if(!profile || profile.peran!=='admin')return <main className="center"><section className="login-card"><ShieldCheck size={40}/><h2>Akses belum tersedia</h2><p>Akun ini belum terdaftar sebagai administrator aktif. Hubungi pemilik proyek Supabase untuk penetapan peran.</p><button className="primary" onClick={()=>client.auth.signOut()}>Keluar</button></section></main>;
 
