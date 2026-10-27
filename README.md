@@ -5,7 +5,7 @@ Aplikasi administrasi Koperasi Simpan Pinjam (KSP) dengan **Supabase**, **Cloudf
 ## Status
 - ✅ Database Supabase: 14 tabel, RLS aktif, konfigurasi pokok Rp100.000, wajib Rp10.000/bulan, bunga flat 1%/bulan.
 - ✅ Kebijakan RLS admin: akses baca dan pengelolaan anggota.
-- ✅ Dashboard React tahap awal: autentikasi, ringkasan, daftar/tambah/edit anggota, export PDF (cetak browser) dan CSV (dibuka di Excel).
+- ✅ Dashboard React tahap awal: autentikasi, ringkasan, daftar/tambah/edit anggota, export PDF dan Excel (.xlsx).
 - ⏳ Pencatatan transaksi keuangan **belum diaktifkan** sampai RPC atomik dan jurnal diuji.
 - ⏳ WhatsApp Cloud API belum terhubung; Cloudflare belum di-deploy.
 
@@ -36,7 +36,7 @@ ON CONFLICT (auth_user_id) DO NOTHING;
 - RLS semua tabel aktif; pengguna biasa tidak memiliki hak membaca keuangan.
 - Administrator mendapat baca data keuangan dan kelola anggota; transaksi finansial tidak dibuka melalui CRUD langsung.
 - WhatsApp dan sistem transaksi tunai baru diaktifkan setelah verifikasi anggota, audit, jurnal berimbang dan mekanisme pembayaran atomik dibuat.
-- Tampilan export Excel saat ini **CSV**, bukan XLSX. PDF sementara menggunakan fitur **Print/Save as PDF** browser.
+- Laporan anggota sudah dapat diekspor sebagai file PDF dan Excel (.xlsx); laporan keuangan menyusul setelah modul transaksi siap.
 
 ## Database
 Proyek Supabase: `wlwfhelhaeiltnqfnzjd`.
